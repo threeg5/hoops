@@ -1,0 +1,85 @@
+/* Desk chrome (color, type, header, cards) comes from Gridiron's styles.css. */
+
+.desks a {
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  background: var(--navy);
+  color: var(--silver);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.desks a:hover {
+  background: var(--gold);
+  color: #1a1204;
+  border-color: var(--gold);
+}
+
+.team-name {
+  margin: 0 0 8px;
+  color: var(--silver);
+}
+
+.log-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin: 18px 0 10px;
+}
+
+.log-tools button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--navy);
+  color: var(--gold-2);
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.log-tools button.active,
+.log-tools button:hover {
+  background: var(--gold);
+  color: #1a1204;
+  border-color: var(--gold);
+}
+
+.log ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.log li {
+  display: grid;
+  grid-template-columns: 110px 72px 1fr;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.log li.score-play { border-color: var(--gold); }
+
+.when {
+  display: flex;
+  flex-direction: column;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.when b { color: var(--text); font-size: 16px; }
+
+.play-score { font-variant-numeric: tabular-nums; font-weight: 700; }

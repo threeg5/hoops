@@ -1,0 +1,25 @@
+# Render Blueprint — New → Blueprint → this repo.
+# API stays on Render. Public site is HostGator: https://theprofitengineer.com/hoops/
+# After the API is live, from web/: npm run build:hostgator && python deploy-hostgator.py
+
+services:
+  - type: web
+    name: hoops-api
+    runtime: python
+    rootDir: api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: hoops-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: CORS_ORIGINS
+        value: https://theprofitengineer.com,https://www.theprofitengineer.com

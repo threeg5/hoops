@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+node_modules/
+dist/
+.env
+web/.env.hostgator
+web/.env.hostgator.ftp
+.DS_Store
+web/dist/
+api/data/
