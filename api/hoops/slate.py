@@ -158,26 +158,28 @@ def team_log(conn, abbr: str, before: str, season_types: tuple[str, ...]) -> lis
     )
 
 
-def season_label(year) -> str:
+def season_label(year, calendar: bool = False) -> str:
     if not year:
         return "regular season"
     text = str(int(year))
+    if calendar:
+        return f"{text} regular season"
     return f"{int(year) - 1}-{text[-2:]} regular season"
 
 
-def choose_samples(log: list[dict], season) -> tuple[list[dict], list[dict], str]:
+def choose_samples(log: list[dict], season, calendar: bool = False) -> tuple[list[dict], list[dict], str]:
     """Full current season once it has a body. Opening weeks stay on last season."""
     if not log:
         return [], [], "regular season"
     current = [game for game in log if season and game.get("season") == season]
     if len(current) >= SEASON_BODY_GAMES:
         body = current
-        label = season_label(season)
+        label = season_label(season, calendar)
     else:
         years = sorted({game["season"] for game in log if game.get("season") not in (None, season)}, reverse=True)
         prior_year = years[0] if years else None
         body = [game for game in log if game.get("season") == prior_year] if prior_year else current
-        label = season_label(prior_year or season)
+        label = season_label(prior_year or season, calendar)
     recent_pool = current if len(current) >= TEAM_RECENT_GAMES else log
     return body, recent_pool[:TEAM_RECENT_GAMES], label
 
@@ -217,15 +219,15 @@ def outs_for(conn, team_id: str | None) -> list[dict]:
     return shown
 
 
-def side_card(conn, abbr: str, team_id: str | None, before: str, season_type: str, season, rest) -> dict:
+def side_card(conn, abbr: str, team_id: str | None, before: str, season_type: str, season, rest, sport: str = "NBA") -> dict:
     team = one(conn, "SELECT abbr, name, color FROM teams WHERE abbr = ?", (abbr,)) or {}
     types = ("REG", "POST") if season_type == "POST" else ("REG",)
     log = team_log(conn, abbr, before, types)
     if not log and season_type != "REG":
         log = team_log(conn, abbr, before, ("REG", "POST", "PRE"))
-    body, recent, label = choose_samples(log, season)
+    body, recent, label = choose_samples(log, season, sport == "WNBA")
     if not body:
-        label = "No NBA season on file"
+        label = f"No {sport} season on file"
     elif season_type == "POST":
         label = label.replace("regular season", "games already played")
     return {
@@ -291,15 +293,15 @@ def expected_score(home: dict, away: dict, env: dict, neutral: bool, season_type
     }
 
 
-def decorate_game(conn, game: dict, env: dict) -> dict:
+def decorate_game(conn, game: dict, env: dict, sport: str = "NBA") -> dict:
     tips = tip_labels(game.get("start_utc"))
     before = game.get("gameday") or "9999-12-31"
     season_type = game.get("season_type") or "REG"
     away = side_card(
-        conn, game["away_team"], game.get("away_id"), before, season_type, game.get("season"), game.get("away_rest")
+        conn, game["away_team"], game.get("away_id"), before, season_type, game.get("season"), game.get("away_rest"), sport
     )
     home = side_card(
-        conn, game["home_team"], game.get("home_id"), before, season_type, game.get("season"), game.get("home_rest")
+        conn, game["home_team"], game.get("home_id"), before, season_type, game.get("season"), game.get("home_rest"), sport
     )
     return {
         "game_id": game["game_id"],
@@ -328,12 +330,13 @@ def decorate_game(conn, game: dict, env: dict) -> dict:
     }
 
 
-def get_slate(conn, gameday: str | None = None) -> dict:
+def get_slate(conn, gameday: str | None = None, league: str = "nba") -> dict:
     from hoops.live import refresh_day
 
+    sport = "WNBA" if league == "wnba" else "NBA"
     anchor = today_et()
     day = resolve_day(conn, gameday)
-    live = refresh_day(conn, day.replace("-", ""))
+    live = refresh_day(conn, day.replace("-", ""), league=league)
     env = league_environment(conn)
     games = rows(
         conn,
@@ -356,10 +359,11 @@ def get_slate(conn, gameday: str | None = None) -> dict:
             "label": label_dt.strftime("%A, %b ") + str(label_dt.day),
             "games": len(games),
             "is_today": day == anchor,
+            "league": league,
         },
         "days": list_days(conn, anchor if not gameday else day),
         "environment": env,
         "live": live,
-        "games": [decorate_game(conn, game, env) for game in games],
+        "games": [decorate_game(conn, game, env, sport) for game in games],
         "ingesting": False,
     }

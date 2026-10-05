@@ -10,9 +10,12 @@ load_dotenv(REPO_ROOT / ".env")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", str(ROOT / "data")))
 DB_PATH = DATA_DIR / "hoops.db"
+WNBA_DB_PATH = DATA_DIR / "whoops.db"
 
-# ESPN season year is the year the season ends. 2026 is 2025-26, 2027 is 2026-27.
+# ESPN NBA season year is the year the season ends. 2026 is 2025-26, 2027 is 2026-27.
 SEASONS = [2026, 2027]
+# WNBA season year is the calendar year. 2026 is the 2026 season.
+WNBA_SEASONS = [2025, 2026]
 # Season body is the full regular season once 10 games exist.
 # Before that (preseason, opening weeks) the body stays the previous season.
 SEASON_BODY_GAMES = 10

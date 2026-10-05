@@ -102,13 +102,23 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function fetchSlate(date?: string) {
-  const query = date ? `?date=${encodeURIComponent(date)}` : "";
-  return getJson<Slate>(`/api/slate${query}`);
+export type League = "nba" | "wnba";
+
+function leagueQuery(league: League = "nba", extra?: Record<string, string>) {
+  const params = new URLSearchParams(extra);
+  if (league !== "nba") params.set("league", league);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
-export function fetchMinutes(gameId: string) {
-  return getJson<Minutes>(`/api/games/${gameId}/minutes`);
+export function fetchSlate(date?: string, league: League = "nba") {
+  const extra: Record<string, string> = {};
+  if (date) extra.date = date;
+  return getJson<Slate>(`/api/slate${leagueQuery(league, extra)}`);
+}
+
+export function fetchMinutes(gameId: string, league: League = "nba") {
+  return getJson<Minutes>(`/api/games/${gameId}/minutes${leagueQuery(league)}`);
 }
 
 export function ctClock(iso?: string | null) {
@@ -143,11 +153,10 @@ export type ListedPlayer = {
   team_name: string;
 };
 
-export function fetchPlayers(q = "") {
-  const params = new URLSearchParams();
-  if (q.trim()) params.set("q", q.trim());
-  const query = params.toString();
-  return getJson<{ players: ListedPlayer[] }>(`/api/players${query ? `?${query}` : ""}`);
+export function fetchPlayers(q = "", league: League = "nba") {
+  const extra: Record<string, string> = {};
+  if (q.trim()) extra.q = q.trim();
+  return getJson<{ players: ListedPlayer[] }>(`/api/players${leagueQuery(league, extra)}`);
 }
 
 const TPE_API = (

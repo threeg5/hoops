@@ -4,6 +4,8 @@ Personal research tool for NBA teams. The slate shows the day’s games with eac
 
 Data comes from ESPN’s public NBA JSON (scoreboard, game summary plays, team schedules, injury report). Not an official NBA feed and not a betting lock engine.
 
+W-HOOPS is its own page for the WNBA, on ESPN’s `basketball/wnba` feed. Locally it is `http://127.0.0.1:5177/whoops/`. The public page is `https://theprofitengineer.com/whoops/`. It lives in `whoops.db`, separate from `hoops.db`, so Atlanta and New York never mix the Hawks with the Dream or the Knicks with the Liberty. Load it with `python -m hoops.ingest wnba`. The HOOPS page does not list it and does not read that book. Publish the page with `npm run build:whoops` and `python deploy-hostgator.py whoops` after the API on Render knows `league=wnba`.
+
 The NBA.com live CDN (`cdn.nba.com` liveData scoreboard / box score / play-by-play) is the official page feed and updates during games. It answered 403 on 2026-10-04 even with an nba.com referrer, so the desk uses ESPN until that CDN is usable again.
 
 ## Structure

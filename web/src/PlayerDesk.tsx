@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { fetchPlayers, type ListedPlayer } from "./api";
+import { fetchPlayers, type League, type ListedPlayer } from "./api";
 
-export default function PlayerDesk() {
+export default function PlayerDesk({ league }: { league: League }) {
   const [query, setQuery] = useState("");
   const [players, setPlayers] = useState<ListedPlayer[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      fetchPlayers(query)
+      fetchPlayers(query, league)
         .then((data) => {
           setPlayers(data.players);
           setError(null);
@@ -16,15 +16,15 @@ export default function PlayerDesk() {
         .catch((err) => setError(err instanceof Error ? err.message : "Player list failed"));
     }, 200);
     return () => window.clearTimeout(handle);
-  }, [query]);
+  }, [query, league]);
 
   return (
     <section className="admin-desk">
       <div className="admin-head">
         <p className="kicker">Player stats</p>
-        <h2>Injury report</h2>
+        <h2>{league === "wnba" ? "WNBA injury report" : "Injury report"}</h2>
         <p className="lede">
-          The ESPN injury report for every NBA team. Search a name or a club. Season averages are not on this desk yet.
+          The ESPN injury report for every {league === "wnba" ? "WNBA" : "NBA"} team. Search a name or a club. Season averages are not on this desk yet.
         </p>
       </div>
       <label className="admin-search">

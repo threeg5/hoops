@@ -1,7 +1,7 @@
-"""ESPN's public NBA JSON. No key.
+"""ESPN's public basketball JSON. No key.
 
-Scoreboard and the game summary (play log) are what the ESPN game page polls
-while a game is on, so the clock and the last play stay current.
+NBA and WNBA use the same site feed. Scoreboard and the game summary are
+what the ESPN game page polls while a game is on.
 """
 
 from __future__ import annotations
@@ -14,7 +14,17 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
-BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
+LEAGUE_BASE = {
+    "nba": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba",
+    "wnba": "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba",
+}
+
+
+def base(league: str = "nba") -> str:
+    try:
+        return LEAGUE_BASE[league]
+    except KeyError as exc:
+        raise ValueError("league is nba or wnba") from exc
 
 
 def get_json(url: str) -> dict:
@@ -26,11 +36,11 @@ def get_json(url: str) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def fetch_teams() -> list[dict]:
-    data = get_json(f"{BASE}/teams?limit=50")
-    league = data["sports"][0]["leagues"][0]
+def fetch_teams(league: str = "nba") -> list[dict]:
+    data = get_json(f"{base(league)}/teams?limit=50")
+    league_node = data["sports"][0]["leagues"][0]
     teams = []
-    for item in league.get("teams") or []:
+    for item in league_node.get("teams") or []:
         team = item.get("team") or item
         if team.get("isAllStar"):
             continue
@@ -40,23 +50,23 @@ def fetch_teams() -> list[dict]:
     return teams
 
 
-def fetch_schedule(team_id: str, season: int) -> dict:
-    return get_json(f"{BASE}/teams/{team_id}/schedule?season={season}")
+def fetch_schedule(team_id: str, season: int, league: str = "nba") -> dict:
+    return get_json(f"{base(league)}/teams/{team_id}/schedule?season={season}")
 
 
-def fetch_scoreboard(yyyymmdd: str | None = None) -> dict:
-    url = f"{BASE}/scoreboard"
+def fetch_scoreboard(yyyymmdd: str | None = None, league: str = "nba") -> dict:
+    url = f"{base(league)}/scoreboard"
     if yyyymmdd:
         url = f"{url}?dates={yyyymmdd}"
     return get_json(url)
 
 
-def fetch_summary(event_id: str) -> dict:
-    return get_json(f"{BASE}/summary?event={event_id}")
+def fetch_summary(event_id: str, league: str = "nba") -> dict:
+    return get_json(f"{base(league)}/summary?event={event_id}")
 
 
-def fetch_injuries() -> dict:
-    return get_json(f"{BASE}/injuries")
+def fetch_injuries(league: str = "nba") -> dict:
+    return get_json(f"{base(league)}/injuries")
 
 
 def quiet_http_error(exc: BaseException) -> str:

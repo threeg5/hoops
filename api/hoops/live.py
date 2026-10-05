@@ -19,7 +19,7 @@ from hoops.ingest import parse_event, store_injuries
 _lock = threading.Lock()
 _scoreboard_at: dict[str, float] = {}
 _minutes_cache: dict[str, tuple[float, dict]] = {}
-_injuries_at = 0.0
+_injuries_at: dict[str, float] = {}
 INJURY_SECONDS = 300
 
 
@@ -30,10 +30,11 @@ def _meta(conn, key: str, value: str) -> None:
     )
 
 
-def refresh_day(conn, yyyymmdd: str, *, force: bool = False) -> dict:
+def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba") -> dict:
     """Update one date's clock and score. Cached for a few seconds."""
     now = time.time()
-    pulled = _scoreboard_at.get(yyyymmdd)
+    cache_key = f"{league}:{yyyymmdd}"
+    pulled = _scoreboard_at.get(cache_key)
     if not force and pulled is not None and now - pulled < LIVE_CACHE_SECONDS:
         row = conn.execute(
             "SELECT value FROM meta WHERE key = 'live_pulled_at'"
@@ -54,7 +55,7 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False) -> dict:
         }
     try:
         try:
-            payload = fetch_scoreboard(yyyymmdd)
+            payload = fetch_scoreboard(yyyymmdd, league)
         except Exception as exc:
             return {"source": "ESPN", "error": quiet_http_error(exc), "pulled_at": None}
         updated = 0
@@ -109,18 +110,19 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False) -> dict:
             updated += 1
         global _injuries_at
         team_count = conn.execute("SELECT COUNT(*) AS n FROM teams").fetchone()["n"]
-        if team_count and time.time() - _injuries_at >= INJURY_SECONDS:
+        last_injuries = _injuries_at.get(league, 0.0)
+        if team_count and time.time() - last_injuries >= INJURY_SECONDS:
             teams = {
                 row["team_id"]: dict(row)
                 for row in conn.execute("SELECT team_id, abbr, name FROM teams")
             }
-            store_injuries(conn, teams)
-            _injuries_at = time.time()
+            store_injuries(conn, teams, league)
+            _injuries_at[league] = time.time()
         stamp = datetime.now(timezone.utc).isoformat()
         _meta(conn, "live_pulled_at", stamp)
         _meta(conn, "live_source", "ESPN")
         conn.commit()
-        _scoreboard_at[yyyymmdd] = time.time()
+        _scoreboard_at[cache_key] = time.time()
         return {"source": "ESPN", "pulled_at": stamp, "updated": updated, "cached": False}
     except Exception as exc:
         conn.rollback()
@@ -129,15 +131,16 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False) -> dict:
         _lock.release()
 
 
-def game_minutes(event_id: str) -> dict:
+def game_minutes(event_id: str, league: str = "nba") -> dict:
     now = time.time()
-    cached = _minutes_cache.get(event_id)
+    cache_key = f"{league}:{event_id}"
+    cached = _minutes_cache.get(cache_key)
     if cached and now - cached[0] < LIVE_CACHE_SECONDS:
         payload = dict(cached[1])
         payload["cached"] = True
         return payload
     try:
-        summary = fetch_summary(event_id)
+        summary = fetch_summary(event_id, league)
     except Exception as exc:
         return {"game_id": event_id, "error": quiet_http_error(exc), "plays": []}
     plays = []
@@ -173,5 +176,5 @@ def game_minutes(event_id: str) -> dict:
         "plays": plays,
         "cached": False,
     }
-    _minutes_cache[event_id] = (time.time(), payload)
+    _minutes_cache[cache_key] = (time.time(), payload)
     return payload

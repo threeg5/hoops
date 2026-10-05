@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:hostgator": "vite build --mode hostgator",
+    "build:whoops": "vite build --mode whoops",
     "deploy:hostgator": "python deploy-hostgator.py",
     "preview": "vite preview"
   },

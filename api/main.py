@@ -7,21 +7,18 @@ import traceback
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from hoops.config import DATA_DIR, DB_PATH, cors_origins
+from hoops.config import DATA_DIR, DB_PATH, WNBA_DB_PATH, cors_origins
 from hoops.db import connect
 from hoops.routes import router
-
-LOCK_PATH = DATA_DIR / "ingest.lock"
-
 
 def _log(message: str) -> None:
     print(message, flush=True)
 
 
-def _ingest_complete() -> bool:
-    if not DB_PATH.exists():
+def _ingest_complete(path) -> bool:
+    if not path.exists():
         return False
-    conn = connect()
+    conn = connect(path)
     try:
         row = conn.execute("SELECT value FROM meta WHERE key = 'ingest_complete'").fetchone()
         return bool(row and str(row["value"]) == "1")
@@ -31,27 +28,27 @@ def _ingest_complete() -> bool:
         conn.close()
 
 
-def _boot_ingest() -> None:
+def _boot_ingest(league: str, path, lock) -> None:
     time.sleep(2)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        fd = os.open(LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(fd, str(os.getpid()).encode())
         os.close(fd)
     except FileExistsError:
-        _log(f"Skip ingest; lock already present at {LOCK_PATH}")
+        _log(f"Skip {league} ingest; lock already present at {lock}")
         return
     try:
-        if _ingest_complete():
-            _log("Skip ingest; already complete")
+        if _ingest_complete(path):
+            _log(f"Skip {league} ingest; already complete")
             return
         from hoops.ingest import run_ingest
 
-        run_ingest()
+        run_ingest(league)
     except Exception:
         traceback.print_exc()
     finally:
-        LOCK_PATH.unlink(missing_ok=True)
+        lock.unlink(missing_ok=True)
 
 
 @asynccontextmanager
@@ -60,14 +57,19 @@ async def lifespan(_app: FastAPI):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         _log(f"Could not create data dir {DATA_DIR}: {exc}")
-    if LOCK_PATH.exists():
-        _log(f"Removing stale ingest lock {LOCK_PATH}")
-        LOCK_PATH.unlink(missing_ok=True)
-    if _ingest_complete():
-        _log("HOOPS database ready")
-    else:
-        _log("Starting HOOPS ingest thread")
-        Thread(target=_boot_ingest, daemon=True).start()
+    books = (
+        ("nba", DB_PATH, DATA_DIR / "ingest.lock"),
+        ("wnba", WNBA_DB_PATH, DATA_DIR / "ingest-wnba.lock"),
+    )
+    for league, path, lock in books:
+        if lock.exists():
+            _log(f"Removing stale ingest lock {lock}")
+            lock.unlink(missing_ok=True)
+        if _ingest_complete(path):
+            _log(f"{league.upper()} database ready")
+        else:
+            _log(f"Starting {league.upper()} ingest thread")
+            Thread(target=_boot_ingest, args=(league, path, lock), daemon=True).start()
     yield
 
 

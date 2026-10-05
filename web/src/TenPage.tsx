@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchSlate, type SlateGame } from "./api";
+import { fetchSlate, type League, type SlateGame } from "./api";
 
 function margin(game: SlateGame) {
   if (!game.expected) return "—";
@@ -8,20 +8,20 @@ function margin(game: SlateGame) {
   return `${leader} by ${Math.abs(game.expected.margin).toFixed(1)}`;
 }
 
-export default function TenPage() {
+export default function TenPage({ league }: { league: League }) {
   const [games, setGames] = useState<SlateGame[]>([]);
   const [label, setLabel] = useState("Tonight");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSlate()
+    fetchSlate(undefined, league)
       .then((slate) => {
         setGames(slate.games);
         setLabel(slate.slate?.label ?? "Tonight");
         setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "TENPAGE failed"));
-  }, []);
+  }, [league]);
 
   return (
     <section className="admin-desk">
@@ -29,7 +29,7 @@ export default function TenPage() {
         <p className="kicker">TENPAGE</p>
         <h2>{label}</h2>
         <p className="lede">
-          Expected score for each NBA game on the slate. This is the HOOPS number. It is not a settled wager.
+          Expected score for each game on this slate. It is the desk's number. It is not a settled wager.
         </p>
       </div>
       {error && <p className="error">{error}</p>}

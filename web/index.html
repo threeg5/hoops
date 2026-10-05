@@ -22,6 +22,15 @@
   </head>
   <body>
     <div id="root">Loading HOOPS…</div>
+    <script>
+      if (location.pathname.replace(/\/+$/, "").endsWith("/whoops")) {
+        document.title = "W-HOOPS — WNBA team desk";
+        var root = document.getElementById("root");
+        if (root) root.textContent = "Loading W-HOOPS…";
+        var about = document.querySelector('meta[name="description"]');
+        if (about) about.setAttribute("content", "WNBA team research desk: tonight's games, recent points, rest, injuries, expected score, and a live play log.");
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

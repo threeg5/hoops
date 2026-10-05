@@ -114,9 +114,9 @@ def cwd_parts(ftp: ExplicitFTPTLS, path: str) -> str:
     return ftp.pwd()
 
 
-def cwd_remote(ftp: ExplicitFTPTLS, preferred: str) -> str:
+def cwd_remote(ftp: ExplicitFTPTLS, preferred: str, only: str = "") -> str:
     print(f"FTP home listing: {', '.join(list_names(ftp)) or '(empty)'}")
-    candidates = [
+    candidates = [only] if only else [
         preferred,
         "public_html/website_c7b1cc7d/hoops",
         *REMOTE_DIR_FALLBACKS,
@@ -212,6 +212,7 @@ def upload_tree(ftp: ExplicitFTPTLS, local_root: Path) -> int:
 
 
 def main() -> None:
+    only = sys.argv[1].strip().strip("/") if len(sys.argv) > 1 else ""
     if not ENV_FILE.is_file():
         fail(
             f"Missing {ENV_FILE.name}. Copy .env.hostgator.ftp.example "
@@ -251,7 +252,7 @@ def main() -> None:
     ftp = connect(host, port, user, password)
     count = 0
     try:
-        cwd_remote(ftp, remote_dir)
+        chosen = cwd_remote(ftp, remote_dir, only)
         print_listing(ftp, "before upload")
         count = upload_tree(ftp, DIST_DIR)
         chmod_public(ftp, DIST_DIR)
@@ -273,8 +274,9 @@ def main() -> None:
         except Exception:
             ftp.close()
 
+    folder = only or "hoops"
     print(f"Done. Uploaded {count} file(s).")
-    print("Live: https://theprofitengineer.com/hoops/")
+    print(f"Live: https://theprofitengineer.com/{folder}/")
 
 
 if __name__ == "__main__":

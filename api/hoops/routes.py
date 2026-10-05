@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Query
 
-from hoops.config import DATA_DIR, DB_PATH
+from hoops.config import DATA_DIR, DB_PATH, WNBA_DB_PATH
 from hoops.db import connect
 from hoops.live import game_minutes
 from hoops.slate import get_slate
@@ -47,27 +47,43 @@ def meta():
         conn.close()
 
 
+def league_name(value: str) -> str:
+    if value not in {"nba", "wnba"}:
+        raise HTTPException(400, "league is nba or wnba")
+    return value
+
+
+def league_db(league: str):
+    return WNBA_DB_PATH if league == "wnba" else DB_PATH
+
+
 @router.get("/api/slate")
-def slate(date: str | None = Query(default=None, alias="date")):
+def slate(
+    date: str | None = Query(default=None, alias="date"),
+    league: str = "nba",
+):
+    league = league_name(league)
     if date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         raise HTTPException(400, "date is YYYY-MM-DD")
-    conn = connect()
+    path = league_db(league)
+    conn = connect(path)
     try:
-        if not DB_PATH.exists():
-            return {"slate": None, "days": [], "games": [], "ingesting": True}
+        if not path.exists():
+            return {"slate": None, "days": [], "games": [], "ingesting": True, "league": league}
         done = conn.execute(
             "SELECT value FROM meta WHERE key = 'ingest_complete'"
         ).fetchone()
         if not done or done["value"] != "1":
-            return {"slate": None, "days": [], "games": [], "ingesting": True}
-        return get_slate(conn, date)
+            return {"slate": None, "days": [], "games": [], "ingesting": True, "league": league}
+        return get_slate(conn, date, league)
     finally:
         conn.close()
 
 
 @router.get("/api/players")
-def players(q: str = ""):
-    conn = connect()
+def players(q: str = "", league: str = "nba"):
+    league = league_name(league)
+    conn = connect(league_db(league))
     try:
         sql = """
             SELECT i.player_name, i.position, i.status, i.detail, i.comment,
@@ -87,7 +103,8 @@ def players(q: str = ""):
 
 
 @router.get("/api/games/{game_id}/minutes")
-def minutes(game_id: str):
+def minutes(game_id: str, league: str = "nba"):
+    league = league_name(league)
     if not game_id.isdigit():
         raise HTTPException(400, "Game id should be the ESPN event id")
-    return game_minutes(game_id)
+    return game_minutes(game_id, league)

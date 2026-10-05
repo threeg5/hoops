@@ -12,6 +12,7 @@ import {
   tpeAccountUrl,
   tpeHomeUrl,
   type FormLine,
+  type League,
   type Minutes,
   type Slate,
   type SlateGame,
@@ -20,6 +21,16 @@ import {
 import AdminDesk from "./Admin";
 import PlayerDesk from "./PlayerDesk";
 import TenPage from "./TenPage";
+
+function pageLeague(): League {
+  const forced = import.meta.env.VITE_LEAGUE;
+  if (forced === "wnba" || forced === "nba") return forced;
+  const path = window.location.pathname.replace(/\/+$/, "");
+  return path.endsWith("/whoops") ? "wnba" : "nba";
+}
+
+const PAGE: League = pageLeague();
+const WNBA = PAGE === "wnba";
 
 function dayLabel(iso: string) {
   const [year, month, day] = iso.split("-").map(Number);
@@ -120,7 +131,7 @@ function formBits(line: FormLine | null) {
   };
 }
 
-function MinuteLog({ game }: { game: SlateGame }) {
+function MinuteLog({ game, league }: { game: SlateGame; league: League }) {
   const [log, setLog] = useState<Minutes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scoringOnly, setScoringOnly] = useState(false);
@@ -130,7 +141,7 @@ function MinuteLog({ game }: { game: SlateGame }) {
     let stop = false;
     async function load() {
       try {
-        const next = await fetchMinutes(game.game_id);
+        const next = await fetchMinutes(game.game_id, league);
         if (stop) return;
         setLog(next);
         setPulledAt(new Date());
@@ -145,7 +156,7 @@ function MinuteLog({ game }: { game: SlateGame }) {
       stop = true;
       window.clearInterval(id);
     };
-  }, [game.game_id]);
+  }, [game.game_id, league]);
 
   const plays = useMemo(() => {
     const all = log?.plays || [];
@@ -189,7 +200,7 @@ function MinuteLog({ game }: { game: SlateGame }) {
   );
 }
 
-function Matchup({ game, onBack }: { game: SlateGame; onBack: () => void }) {
+function Matchup({ game, league, onBack }: { game: SlateGame; league: League; onBack: () => void }) {
   const away = formBits(game.away.overall);
   const home = formBits(game.home.overall);
   const expected = game.expected;
@@ -280,7 +291,7 @@ function Matchup({ game, onBack }: { game: SlateGame; onBack: () => void }) {
           : "None listed"}
       </section>
 
-      <MinuteLog game={game} />
+      <MinuteLog game={game} league={league} />
     </div>
   );
 }
@@ -339,6 +350,7 @@ export default function App() {
   const [pullTick, setPullTick] = useState(0);
 
   useEffect(() => {
+    document.title = WNBA ? "W-HOOPS — WNBA team desk" : "HOOPS — NBA team desk";
     claimHandedSession();
     fetchMe().then(setAccount);
   }, []);
@@ -353,7 +365,7 @@ export default function App() {
     let stop = false;
     async function load() {
       try {
-        const next = await fetchSlate(day);
+        const next = await fetchSlate(day, PAGE);
         if (stop) return;
         setSlate(next);
         setError(null);
@@ -399,13 +411,13 @@ export default function App() {
         <div className="brand">
           <img
             src={`${import.meta.env.BASE_URL}hoops-mark.jpg`}
-            alt="HOOPS logo"
+            alt={WNBA ? "W-HOOPS logo" : "HOOPS logo"}
             width={44}
             height={44}
           />
           <div>
-            <p className="kicker">Team research desk</p>
-            <h1>HOOPS</h1>
+            <p className="kicker">{WNBA ? "WNBA research desk" : "Team research desk"}</p>
+            <h1>{WNBA ? "W-HOOPS" : "HOOPS"}</h1>
           </div>
         </div>
         <nav className="desks" aria-label="Desks">
@@ -453,18 +465,18 @@ export default function App() {
       {slate?.ingesting && (
         <section className="empty">
           <h2>Loading the slate</h2>
-          <p>Pulling NBA schedules and the injury report.</p>
+          <p>Pulling {WNBA ? "WNBA" : "NBA"} schedules and the injury report.</p>
         </section>
       )}
 
       {desk === "players" ? (
-        <PlayerDesk />
+        <PlayerDesk league={PAGE} />
       ) : desk === "tenpage" ? (
-        <TenPage />
+        <TenPage league={PAGE} />
       ) : desk === "admin" && account ? (
         <AdminDesk viewer={account} onUser={setAccount} />
       ) : open ? (
-        <Matchup game={open} onBack={closeGame} />
+        <Matchup game={open} league={PAGE} onBack={closeGame} />
       ) : (
         <>
           <div className="slate-bar">
@@ -472,7 +484,7 @@ export default function App() {
               <p className="kicker">Tonight’s slate</p>
               <h2>{current?.label ?? "No games loaded"}</h2>
               <p className="sub">
-                NBA teams. Click a game for each side’s numbers, an expected score, and the minute log.
+                {WNBA ? "WNBA" : "NBA"} teams. Click a game for each side’s numbers, an expected score, and the minute log.
               </p>
             </div>
             <div className="slate-tools">
@@ -499,7 +511,7 @@ export default function App() {
           {slate && !slate.ingesting && slate.games.length === 0 && (
             <section className="empty">
               <h2>No slate yet</h2>
-              <p>No NBA games on this date.</p>
+              <p>No {WNBA ? "WNBA" : "NBA"} games on this date.</p>
             </section>
           )}
           <div className="slate-grid">
