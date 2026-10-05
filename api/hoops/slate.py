@@ -62,9 +62,9 @@ def today_et() -> str:
     return datetime.now(ET).date().isoformat()
 
 
-def list_days(conn, anchor: str) -> list[dict]:
+def list_days(conn, anchor: str, ahead: int = 14) -> list[dict]:
     start = (datetime.strptime(anchor, "%Y-%m-%d").date() - timedelta(days=3)).isoformat()
-    end = (datetime.strptime(anchor, "%Y-%m-%d").date() + timedelta(days=14)).isoformat()
+    end = (datetime.strptime(anchor, "%Y-%m-%d").date() + timedelta(days=ahead)).isoformat()
     return rows(
         conn,
         """
@@ -80,11 +80,11 @@ def list_days(conn, anchor: str) -> list[dict]:
     )
 
 
-def resolve_day(conn, gameday: str | None) -> str:
+def resolve_day(conn, gameday: str | None, ahead: int = 14) -> str:
     anchor = today_et()
     if gameday:
         return gameday
-    days = [item["gameday"] for item in list_days(conn, anchor)]
+    days = [item["gameday"] for item in list_days(conn, anchor, ahead)]
     if anchor in days:
         return anchor
     future = [day for day in days if day >= anchor]
@@ -333,9 +333,10 @@ def decorate_game(conn, game: dict, env: dict, sport: str = "NBA") -> dict:
 def get_slate(conn, gameday: str | None = None, league: str = "nba") -> dict:
     from hoops.live import refresh_day
 
-    sport = "WNBA" if league == "wnba" else "NBA"
+    sport = {"wnba": "WNBA", "cbb": "College"}.get(league, "NBA")
+    ahead = 45 if league == "cbb" else 14
     anchor = today_et()
-    day = resolve_day(conn, gameday)
+    day = resolve_day(conn, gameday, ahead)
     live = refresh_day(conn, day.replace("-", ""), league=league)
     env = league_environment(conn)
     games = rows(
@@ -361,7 +362,7 @@ def get_slate(conn, gameday: str | None = None, league: str = "nba") -> dict:
             "is_today": day == anchor,
             "league": league,
         },
-        "days": list_days(conn, anchor if not gameday else day),
+        "days": list_days(conn, anchor if not gameday else day, ahead),
         "environment": env,
         "live": live,
         "games": [decorate_game(conn, game, env, sport) for game in games],

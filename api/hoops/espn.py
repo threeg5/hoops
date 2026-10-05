@@ -1,6 +1,6 @@
 """ESPN's public basketball JSON. No key.
 
-NBA and WNBA use the same site feed. Scoreboard and the game summary are
+NBA and WNBA and men's college basketball use the same site feed. Scoreboard and the game summary are
 what the ESPN game page polls while a game is on.
 """
 
@@ -17,6 +17,7 @@ UA = (
 LEAGUE_BASE = {
     "nba": "https://site.api.espn.com/apis/site/v2/sports/basketball/nba",
     "wnba": "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba",
+    "cbb": "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball",
 }
 
 
@@ -24,7 +25,7 @@ def base(league: str = "nba") -> str:
     try:
         return LEAGUE_BASE[league]
     except KeyError as exc:
-        raise ValueError("league is nba or wnba") from exc
+        raise ValueError("league is nba, wnba, or cbb") from exc
 
 
 def get_json(url: str) -> dict:
@@ -37,7 +38,7 @@ def get_json(url: str) -> dict:
 
 
 def fetch_teams(league: str = "nba") -> list[dict]:
-    data = get_json(f"{base(league)}/teams?limit=50")
+    data = get_json(f"{base(league)}/teams?limit=400")
     league_node = data["sports"][0]["leagues"][0]
     teams = []
     for item in league_node.get("teams") or []:

@@ -30,6 +30,13 @@
         var about = document.querySelector('meta[name="description"]');
         if (about) about.setAttribute("content", "WNBA team research desk: tonight's games, recent points, rest, injuries, expected score, and a live play log.");
       }
+      if (location.pathname.replace(/\/+$/, "").endsWith("/collegehoops")) {
+        document.title = "College Hoops — college basketball desk";
+        var collegeRoot = document.getElementById("root");
+        if (collegeRoot) collegeRoot.textContent = "Loading College Hoops…";
+        var collegeAbout = document.querySelector('meta[name="description"]');
+        if (collegeAbout) collegeAbout.setAttribute("content", "College basketball research desk: tonight's games, recent points, rest, injuries, expected score, and a live play log.");
+      }
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

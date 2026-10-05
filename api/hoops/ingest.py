@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from hoops.config import DB_PATH, SEASONS, WNBA_DB_PATH, WNBA_SEASONS
+from hoops.config import CBB_DB_PATH, CBB_SEASONS, DB_PATH, SEASONS, WNBA_DB_PATH, WNBA_SEASONS
 from hoops.db import connect
 from hoops.espn import fetch_injuries, fetch_schedule, fetch_teams, quiet_http_error
 
@@ -244,21 +244,33 @@ def store_injuries(conn, teams_by_id: dict[str, dict], league: str = "nba") -> i
 
 
 def league_setup(league: str = "nba") -> dict:
-    if league == "wnba":
-        return {
+    books = {
+        "wnba": {
             "league": "wnba",
             "name": "W-HOOPS",
             "seasons": WNBA_SEASONS,
             "db": WNBA_DB_PATH,
             "source": "ESPN WNBA scoreboard, team schedules, injury report",
-        }
-    return {
-        "league": "nba",
-        "name": "HOOPS",
-        "seasons": SEASONS,
-        "db": DB_PATH,
-        "source": "ESPN NBA scoreboard, team schedules, injury report",
+        },
+        "cbb": {
+            "league": "cbb",
+            "name": "College Hoops",
+            "seasons": CBB_SEASONS,
+            "db": CBB_DB_PATH,
+            "source": "ESPN men's college basketball scoreboard, team schedules, injury report",
+        },
+        "nba": {
+            "league": "nba",
+            "name": "HOOPS",
+            "seasons": SEASONS,
+            "db": DB_PATH,
+            "source": "ESPN NBA scoreboard, team schedules, injury report",
+        },
     }
+    try:
+        return books[league]
+    except KeyError as exc:
+        raise ValueError("league is nba, wnba, or cbb") from exc
 
 
 def run_ingest(league: str = "nba") -> dict:

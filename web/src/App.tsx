@@ -24,13 +24,38 @@ import TenPage from "./TenPage";
 
 function pageLeague(): League {
   const forced = import.meta.env.VITE_LEAGUE;
-  if (forced === "wnba" || forced === "nba") return forced;
+  if (forced === "wnba" || forced === "nba" || forced === "cbb") return forced;
   const path = window.location.pathname.replace(/\/+$/, "");
-  return path.endsWith("/whoops") ? "wnba" : "nba";
+  if (path.endsWith("/whoops")) return "wnba";
+  if (path.endsWith("/collegehoops")) return "cbb";
+  return "nba";
 }
 
 const PAGE: League = pageLeague();
-const WNBA = PAGE === "wnba";
+
+const DESK = {
+  nba: {
+    title: "HOOPS",
+    kicker: "Team research desk",
+    teams: "NBA",
+    pulling: "NBA",
+    pageTitle: "HOOPS — NBA team desk",
+  },
+  wnba: {
+    title: "W-HOOPS",
+    kicker: "WNBA research desk",
+    teams: "WNBA",
+    pulling: "WNBA",
+    pageTitle: "W-HOOPS — WNBA team desk",
+  },
+  cbb: {
+    title: "College Hoops",
+    kicker: "College basketball research desk",
+    teams: "College",
+    pulling: "college basketball",
+    pageTitle: "College Hoops — college basketball desk",
+  },
+}[PAGE];
 
 function dayLabel(iso: string) {
   const [year, month, day] = iso.split("-").map(Number);
@@ -350,7 +375,7 @@ export default function App() {
   const [pullTick, setPullTick] = useState(0);
 
   useEffect(() => {
-    document.title = WNBA ? "W-HOOPS — WNBA team desk" : "HOOPS — NBA team desk";
+    document.title = DESK.pageTitle;
     claimHandedSession();
     fetchMe().then(setAccount);
   }, []);
@@ -411,13 +436,13 @@ export default function App() {
         <div className="brand">
           <img
             src={`${import.meta.env.BASE_URL}hoops-mark.jpg`}
-            alt={WNBA ? "W-HOOPS logo" : "HOOPS logo"}
+            alt={`${DESK.title} logo`}
             width={44}
             height={44}
           />
           <div>
-            <p className="kicker">{WNBA ? "WNBA research desk" : "Team research desk"}</p>
-            <h1>{WNBA ? "W-HOOPS" : "HOOPS"}</h1>
+            <p className="kicker">{DESK.kicker}</p>
+            <h1>{DESK.title}</h1>
           </div>
         </div>
         <nav className="desks" aria-label="Desks">
@@ -465,7 +490,7 @@ export default function App() {
       {slate?.ingesting && (
         <section className="empty">
           <h2>Loading the slate</h2>
-          <p>Pulling {WNBA ? "WNBA" : "NBA"} schedules and the injury report.</p>
+          <p>Pulling {DESK.pulling} schedules and the injury report.</p>
         </section>
       )}
 
@@ -484,7 +509,7 @@ export default function App() {
               <p className="kicker">Tonight’s slate</p>
               <h2>{current?.label ?? "No games loaded"}</h2>
               <p className="sub">
-                {WNBA ? "WNBA" : "NBA"} teams. Click a game for each side’s numbers, an expected score, and the minute log.
+                {DESK.teams} teams. Click a game for each side’s numbers, an expected score, and the minute log.
               </p>
             </div>
             <div className="slate-tools">
@@ -511,7 +536,7 @@ export default function App() {
           {slate && !slate.ingesting && slate.games.length === 0 && (
             <section className="empty">
               <h2>No slate yet</h2>
-              <p>No {WNBA ? "WNBA" : "NBA"} games on this date.</p>
+              <p>No {DESK.teams === "College" ? "college" : DESK.teams} games on this date.</p>
             </section>
           )}
           <div className="slate-grid">

@@ -102,7 +102,7 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type League = "nba" | "wnba";
+export type League = "nba" | "wnba" | "cbb";
 
 function leagueQuery(league: League = "nba", extra?: Record<string, string>) {
   const params = new URLSearchParams(extra);

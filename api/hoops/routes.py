@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, HTTPException, Query
 
-from hoops.config import DATA_DIR, DB_PATH, WNBA_DB_PATH
+from hoops.config import CBB_DB_PATH, DATA_DIR, DB_PATH, WNBA_DB_PATH
 from hoops.db import connect
 from hoops.live import game_minutes
 from hoops.slate import get_slate
@@ -48,13 +48,17 @@ def meta():
 
 
 def league_name(value: str) -> str:
-    if value not in {"nba", "wnba"}:
-        raise HTTPException(400, "league is nba or wnba")
+    if value not in {"nba", "wnba", "cbb"}:
+        raise HTTPException(400, "league is nba, wnba, or cbb")
     return value
 
 
 def league_db(league: str):
-    return WNBA_DB_PATH if league == "wnba" else DB_PATH
+    if league == "wnba":
+        return WNBA_DB_PATH
+    if league == "cbb":
+        return CBB_DB_PATH
+    return DB_PATH
 
 
 @router.get("/api/slate")

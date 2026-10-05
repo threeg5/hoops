@@ -22,9 +22,9 @@ export default function PlayerDesk({ league }: { league: League }) {
     <section className="admin-desk">
       <div className="admin-head">
         <p className="kicker">Player stats</p>
-        <h2>{league === "wnba" ? "WNBA injury report" : "Injury report"}</h2>
+        <h2>{league === "wnba" ? "WNBA injury report" : league === "cbb" ? "College injury report" : "Injury report"}</h2>
         <p className="lede">
-          The ESPN injury report for every {league === "wnba" ? "WNBA" : "NBA"} team. Search a name or a club. Season averages are not on this desk yet.
+          The ESPN injury report for every {league === "wnba" ? "WNBA" : league === "cbb" ? "college" : "NBA"} team. Search a name or a club. Season averages are not on this desk yet.
         </p>
       </div>
       <label className="admin-search">

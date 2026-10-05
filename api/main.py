@@ -7,7 +7,7 @@ import traceback
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from hoops.config import DATA_DIR, DB_PATH, WNBA_DB_PATH, cors_origins
+from hoops.config import CBB_DB_PATH, DATA_DIR, DB_PATH, WNBA_DB_PATH, cors_origins
 from hoops.db import connect
 from hoops.routes import router
 
@@ -60,6 +60,7 @@ async def lifespan(_app: FastAPI):
     books = (
         ("nba", DB_PATH, DATA_DIR / "ingest.lock"),
         ("wnba", WNBA_DB_PATH, DATA_DIR / "ingest-wnba.lock"),
+        ("cbb", CBB_DB_PATH, DATA_DIR / "ingest-cbb.lock"),
     )
     for league, path, lock in books:
         if lock.exists():
