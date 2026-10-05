@@ -34,6 +34,6 @@ API on Render from `render.yaml` (Python + SQLite disk). Public site is HostGato
 
 1. Push this repo to GitHub.
 2. Render → New → Blueprint → this repo. First boot ingests if the disk is empty.
-3. Put the API hostname in `web/.env.hostgator` as `VITE_API_URL`.
+3. The live API is `https://hoops-api-5cu4.onrender.com`. Put that in `web/.env.hostgator` as `VITE_API_URL` if it changes.
 4. From `web/`: `npm run build:hostgator` then `python deploy-hostgator.py`.
 5. Add HOOPS on the Profit Engineer home page only after `https://theprofitengineer.com/hoops/` answers.
