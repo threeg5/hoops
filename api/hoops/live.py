@@ -20,11 +20,15 @@ from hoops.ingest import parse_event, store_injuries
 ET = ZoneInfo("America/New_York")
 _lock = threading.Lock()
 _scoreboard_at: dict[str, float] = {}
-_window_at: dict[str, float] = {}
 _minutes_cache: dict[str, tuple[float, dict]] = {}
 _injuries_at: dict[str, float] = {}
 INJURY_SECONDS = 300
-WINDOW_SECONDS = 15 * 60
+# Upcoming games are listed from the scoreboard. That pass is not the book.
+SCHEDULE_SECONDS = 6 * 60 * 60
+# Book pulls (injuries, and later the lines) only at these checkpoints:
+# about 3 days out, the day before gameday, and inside 2 hours of tip.
+BOOK_DAYS = (3, 1)
+TIP_HOURS = 2
 
 
 def _meta(conn, key: str, value: str) -> None:
@@ -34,8 +38,99 @@ def _meta(conn, key: str, value: str) -> None:
     )
 
 
-def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba") -> dict:
-    """Update one date's clock and score. Cached for a few seconds."""
+def _meta_value(conn, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def _stamped_today(conn, key: str, today) -> bool:
+    raw = _meta_value(conn, key)
+    return bool(raw and raw.startswith(today.isoformat()))
+
+
+def _refresh_injuries(conn, league: str) -> None:
+    if time.time() - _injuries_at.get(league, 0.0) < INJURY_SECONDS:
+        return
+    team_count = conn.execute("SELECT COUNT(*) AS n FROM teams").fetchone()["n"]
+    if not team_count:
+        return
+    teams = {
+        row["team_id"]: dict(row)
+        for row in conn.execute("SELECT team_id, abbr, name FROM teams")
+    }
+    store_injuries(conn, teams, league)
+    _injuries_at[league] = time.time()
+
+
+def _lookback_days(conn, today) -> int:
+    lookback = 3
+    row = conn.execute(
+        "SELECT MAX(gameday) AS day FROM games WHERE gameday < ?",
+        (today.isoformat(),),
+    ).fetchone()
+    if row and row["day"]:
+        last = datetime.strptime(row["day"], "%Y-%m-%d").date()
+        gap = (today - last).days
+        if gap > lookback:
+            lookback = min(gap, 21)
+    return lookback
+
+
+def _in_tip_window(conn, today) -> bool:
+    """A game on today's card is inside two hours of tip, or already on."""
+    now = datetime.now(ET)
+    soon = now + timedelta(hours=TIP_HOURS)
+    rows = conn.execute(
+        """
+        SELECT start_utc, status
+        FROM games
+        WHERE gameday = ? AND status != 'post'
+        """,
+        (today.isoformat(),),
+    ).fetchall()
+    for row in rows:
+        if row["status"] == "in":
+            return True
+        if not row["start_utc"]:
+            continue
+        try:
+            start = datetime.fromisoformat(row["start_utc"])
+        except ValueError:
+            continue
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        start = start.astimezone(ET)
+        if now - timedelta(hours=5) <= start <= soon:
+            return True
+    return False
+
+
+def _schedule_due(conn, league: str) -> bool:
+    raw = _meta_value(conn, f"schedule:{league}")
+    if not raw:
+        return True
+    try:
+        prev = datetime.fromisoformat(raw)
+    except ValueError:
+        return True
+    if prev.tzinfo is None:
+        prev = prev.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - prev).total_seconds() >= SCHEDULE_SECONDS
+
+
+def refresh_day(
+    conn,
+    yyyymmdd: str,
+    *,
+    force: bool = False,
+    league: str = "nba",
+    injuries: bool = False,
+) -> dict:
+    """Update one date's clock and score. Cached for a few seconds.
+
+    Injuries are the book side of the pull. The schedule pass lists games
+    without them.
+    """
     now = time.time()
     cache_key = f"{league}:{yyyymmdd}"
     pulled = _scoreboard_at.get(cache_key)
@@ -114,16 +209,8 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba"
                 )
                 inserted += 1
             updated += 1
-        global _injuries_at
-        team_count = conn.execute("SELECT COUNT(*) AS n FROM teams").fetchone()["n"]
-        last_injuries = _injuries_at.get(league, 0.0)
-        if team_count and time.time() - last_injuries >= INJURY_SECONDS:
-            teams = {
-                row["team_id"]: dict(row)
-                for row in conn.execute("SELECT team_id, abbr, name FROM teams")
-            }
-            store_injuries(conn, teams, league)
-            _injuries_at[league] = time.time()
+        if injuries:
+            _refresh_injuries(conn, league)
         if inserted:
             from hoops.ingest import apply_rest
 
@@ -147,40 +234,64 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba"
         _lock.release()
 
 
-def refresh_window(conn, league: str = "nba", ahead: int = 14) -> dict:
-    """Pull ESPN's board for yesterday, today, and the coming days.
+def _pull_book_day(conn, day, kind: str, league: str) -> None:
+    """One book pull for a checkpoint. Lines stay off the slate."""
+    key = f"book:{league}:{day.isoformat()}:{kind}"
+    today = datetime.now(ET).date()
+    if _stamped_today(conn, key, today):
+        return
+    result = refresh_day(
+        conn,
+        day.strftime("%Y%m%d"),
+        force=True,
+        league=league,
+        injuries=True,
+    )
+    if result.get("error"):
+        return
+    _meta(conn, key, datetime.now(ET).isoformat())
+    conn.commit()
 
-    The first ingest is a snapshot. Games added after that only show up if
-    the scoreboard for those dates is read before the slate picks a day.
+
+def refresh_window(conn, league: str = "nba", ahead: int = 14) -> dict:
+    """List upcoming games, and pull the book only at the close checkpoints.
+
+    The scoreboard pass keeps the next dates on the slate. It does not ask
+    for lines. Injuries (the book this desk has today) refresh when a game
+    is about three days out, again the day before gameday, and again inside
+    two hours of tip. Today's score still updates while a game is on.
     """
     today = datetime.now(ET).date()
-    live = refresh_day(conn, today.strftime("%Y%m%d"), league=league)
-    now = time.time()
+    live = refresh_day(conn, today.strftime("%Y%m%d"), league=league, injuries=False)
     if live.get("error"):
         return live
-    if now - _window_at.get(league, 0.0) < WINDOW_SECONDS:
-        return live
-    horizon = max(0, min(ahead, 14))
-    lookback = 3
-    row = conn.execute(
-        "SELECT MAX(gameday) AS day FROM games WHERE gameday < ?",
-        (today.isoformat(),),
-    ).fetchone()
-    if row and row["day"]:
-        last = datetime.strptime(row["day"], "%Y-%m-%d").date()
-        gap = (today - last).days
-        if gap > lookback:
-            lookback = min(gap, 21)
-    failed = False
-    for offset in range(-lookback, horizon + 1):
-        if offset == 0:
-            continue
-        day = (today + timedelta(days=offset)).strftime("%Y%m%d")
-        result = refresh_day(conn, day, league=league)
-        if result.get("error"):
-            failed = True
-    if not failed:
-        _window_at[league] = time.time()
+    if _in_tip_window(conn, today):
+        _pull_book_day(conn, today, "tip", league)
+
+    for offset in BOOK_DAYS:
+        _pull_book_day(conn, today + timedelta(days=offset), f"t{offset}", league)
+
+    lookback = _lookback_days(conn, today)
+    backfill_key = f"backfill:{league}"
+    need_backfill = lookback > 3 and not _stamped_today(conn, backfill_key, today)
+    if _schedule_due(conn, league) or need_backfill:
+        horizon = max(0, min(ahead, 21))
+        failed = False
+        schedule_due = _schedule_due(conn, league)
+        offsets = range(-lookback, horizon + 1) if schedule_due else range(-lookback, 0)
+        for offset in offsets:
+            if offset == 0:
+                continue
+            day = (today + timedelta(days=offset)).strftime("%Y%m%d")
+            result = refresh_day(conn, day, league=league, injuries=False)
+            if result.get("error"):
+                failed = True
+        if not failed and _schedule_due(conn, league):
+            _meta(conn, f"schedule:{league}", datetime.now(timezone.utc).isoformat())
+            conn.commit()
+        if need_backfill and not failed:
+            _meta(conn, backfill_key, datetime.now(ET).isoformat())
+            conn.commit()
     return live
 
 

@@ -339,7 +339,14 @@ def get_slate(conn, gameday: str | None = None, league: str = "nba") -> dict:
     live = refresh_window(conn, league, ahead)
     day = resolve_day(conn, gameday, ahead)
     if day != anchor:
-        live = refresh_day(conn, day.replace("-", ""), league=league)
+        delta = (
+            datetime.strptime(day, "%Y-%m-%d").date()
+            - datetime.strptime(anchor, "%Y-%m-%d").date()
+        ).days
+        # A finished date can refresh its score. Dates still ahead of the
+        # book checkpoints stay on the schedule list, with no line pull.
+        if delta < 0:
+            live = refresh_day(conn, day.replace("-", ""), league=league, injuries=False)
     env = league_environment(conn)
     games = rows(
         conn,
