@@ -161,8 +161,18 @@ def refresh_window(conn, league: str = "nba", ahead: int = 14) -> dict:
     if now - _window_at.get(league, 0.0) < WINDOW_SECONDS:
         return live
     horizon = max(0, min(ahead, 14))
+    lookback = 3
+    row = conn.execute(
+        "SELECT MAX(gameday) AS day FROM games WHERE gameday < ?",
+        (today.isoformat(),),
+    ).fetchone()
+    if row and row["day"]:
+        last = datetime.strptime(row["day"], "%Y-%m-%d").date()
+        gap = (today - last).days
+        if gap > lookback:
+            lookback = min(gap, 21)
     failed = False
-    for offset in range(-1, horizon + 1):
+    for offset in range(-lookback, horizon + 1):
         if offset == 0:
             continue
         day = (today + timedelta(days=offset)).strftime("%Y%m%d")
