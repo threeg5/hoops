@@ -331,13 +331,15 @@ def decorate_game(conn, game: dict, env: dict, sport: str = "NBA") -> dict:
 
 
 def get_slate(conn, gameday: str | None = None, league: str = "nba") -> dict:
-    from hoops.live import refresh_day
+    from hoops.live import refresh_day, refresh_window
 
     sport = {"wnba": "WNBA", "cbb": "College"}.get(league, "NBA")
     ahead = 45 if league == "cbb" else 14
     anchor = today_et()
+    live = refresh_window(conn, league, ahead)
     day = resolve_day(conn, gameday, ahead)
-    live = refresh_day(conn, day.replace("-", ""), league=league)
+    if day != anchor:
+        live = refresh_day(conn, day.replace("-", ""), league=league)
     env = league_environment(conn)
     games = rows(
         conn,

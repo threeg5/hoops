@@ -10,17 +10,21 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from hoops.config import LIVE_CACHE_SECONDS
 from hoops.espn import fetch_scoreboard, fetch_summary, quiet_http_error
 from hoops.ingest import parse_event, store_injuries
 
+ET = ZoneInfo("America/New_York")
 _lock = threading.Lock()
 _scoreboard_at: dict[str, float] = {}
+_window_at: dict[str, float] = {}
 _minutes_cache: dict[str, tuple[float, dict]] = {}
 _injuries_at: dict[str, float] = {}
 INJURY_SECONDS = 300
+WINDOW_SECONDS = 15 * 60
 
 
 def _meta(conn, key: str, value: str) -> None:
@@ -59,6 +63,7 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba"
         except Exception as exc:
             return {"source": "ESPN", "error": quiet_http_error(exc), "pulled_at": None}
         updated = 0
+        inserted = 0
         for event in payload.get("events") or []:
             game = parse_event(event)
             if not game or not game["game_id"]:
@@ -107,6 +112,7 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba"
                     """,
                     game,
                 )
+                inserted += 1
             updated += 1
         global _injuries_at
         team_count = conn.execute("SELECT COUNT(*) AS n FROM teams").fetchone()["n"]
@@ -118,17 +124,54 @@ def refresh_day(conn, yyyymmdd: str, *, force: bool = False, league: str = "nba"
             }
             store_injuries(conn, teams, league)
             _injuries_at[league] = time.time()
+        if inserted:
+            from hoops.ingest import apply_rest
+
+            apply_rest(conn)
         stamp = datetime.now(timezone.utc).isoformat()
         _meta(conn, "live_pulled_at", stamp)
         _meta(conn, "live_source", "ESPN")
         conn.commit()
         _scoreboard_at[cache_key] = time.time()
-        return {"source": "ESPN", "pulled_at": stamp, "updated": updated, "cached": False}
+        return {
+            "source": "ESPN",
+            "pulled_at": stamp,
+            "updated": updated,
+            "inserted": inserted,
+            "cached": False,
+        }
     except Exception as exc:
         conn.rollback()
         return {"source": "ESPN", "error": quiet_http_error(exc), "pulled_at": None}
     finally:
         _lock.release()
+
+
+def refresh_window(conn, league: str = "nba", ahead: int = 14) -> dict:
+    """Pull ESPN's board for yesterday, today, and the coming days.
+
+    The first ingest is a snapshot. Games added after that only show up if
+    the scoreboard for those dates is read before the slate picks a day.
+    """
+    today = datetime.now(ET).date()
+    live = refresh_day(conn, today.strftime("%Y%m%d"), league=league)
+    now = time.time()
+    if live.get("error"):
+        return live
+    if now - _window_at.get(league, 0.0) < WINDOW_SECONDS:
+        return live
+    horizon = max(0, min(ahead, 14))
+    failed = False
+    for offset in range(-1, horizon + 1):
+        if offset == 0:
+            continue
+        day = (today + timedelta(days=offset)).strftime("%Y%m%d")
+        result = refresh_day(conn, day, league=league)
+        if result.get("error"):
+            failed = True
+    if not failed:
+        _window_at[league] = time.time()
+    return live
 
 
 def game_minutes(event_id: str, league: str = "nba") -> dict:
