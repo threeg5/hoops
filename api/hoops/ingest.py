@@ -25,6 +25,25 @@ SEASON_TYPE = {
 }
 
 
+def season_code(event: dict) -> str:
+    """Regular season, playoffs, or preseason.
+
+    Team schedules send seasonType. The scoreboard sends season.type and
+    leaves seasonType off. A missing type is not preseason.
+    """
+    season_type = event.get("seasonType") or {}
+    type_num = season_type.get("type")
+    if type_num is None:
+        type_num = (event.get("season") or {}).get("type")
+    if isinstance(type_num, dict):
+        type_num = type_num.get("type")
+    try:
+        type_num = int(type_num)
+    except (TypeError, ValueError):
+        return "REG"
+    return SEASON_TYPE.get(type_num, "REG")
+
+
 def _score(value) -> int | None:
     if isinstance(value, dict):
         value = value.get("value", value.get("displayValue"))
@@ -94,8 +113,6 @@ def parse_event(event: dict) -> dict | None:
     status = comp.get("status") or {}
     status_type = status.get("type") or {}
     season = event.get("season") or {}
-    season_type = event.get("seasonType") or {}
-    type_num = season_type.get("type")
     start_utc, gameday = _split_start(event.get("date") or comp.get("date"))
     venue = comp.get("venue") or {}
     address = venue.get("address") or {}
@@ -116,7 +133,7 @@ def parse_event(event: dict) -> dict | None:
         "game_id": str(event.get("id") or comp.get("id") or ""),
         "season": season.get("year"),
         "season_label": season.get("displayName") or "",
-        "season_type": SEASON_TYPE.get(type_num, "REG" if type_num == 2 else "PRE"),
+        "season_type": season_code(event),
         "gameday": gameday,
         "start_utc": start_utc,
         "status": state_name,

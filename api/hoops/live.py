@@ -173,7 +173,10 @@ def refresh_day(
                     UPDATE games
                     SET status = ?, status_detail = ?, period = ?, clock = ?,
                         home_score = ?, away_score = ?,
-                        neutral = ?, venue = ?, location = ?, note = ?
+                        neutral = ?, venue = ?, location = ?, note = ?,
+                        season = COALESCE(?, season),
+                        season_type = ?,
+                        season_label = CASE WHEN ? != '' THEN ? ELSE season_label END
                     WHERE game_id = ?
                     """,
                     (
@@ -187,6 +190,10 @@ def refresh_day(
                         game["venue"],
                         game["location"],
                         game["note"],
+                        game["season"],
+                        game["season_type"],
+                        game["season_label"] or "",
+                        game["season_label"] or "",
                         game["game_id"],
                     ),
                 )
@@ -292,7 +299,42 @@ def refresh_window(conn, league: str = "nba", ahead: int = 14) -> dict:
         if need_backfill and not failed:
             _meta(conn, backfill_key, datetime.now(ET).isoformat())
             conn.commit()
+    _correct_preseason_labels(conn, league, today)
     return live
+
+
+def _correct_preseason_labels(conn, league: str, today) -> None:
+    """Re-read dates the scoreboard had stored as preseason.
+
+    One pass per day. Real preseason stays preseason. Regular-season and
+    playoff games pick up the type ESPN sends on the scoreboard.
+    """
+    key = f"seasonfix:{league}"
+    if _stamped_today(conn, key, today):
+        return
+    start = (today - timedelta(days=3)).isoformat()
+    rows = conn.execute(
+        """
+        SELECT DISTINCT gameday
+        FROM games
+        WHERE gameday >= ? AND season_type = 'PRE'
+        ORDER BY gameday
+        """,
+        (start,),
+    ).fetchall()
+    failed = False
+    for row in rows:
+        result = refresh_day(
+            conn,
+            row["gameday"].replace("-", ""),
+            league=league,
+            injuries=False,
+        )
+        if result.get("error"):
+            failed = True
+    if not failed:
+        _meta(conn, key, datetime.now(ET).isoformat())
+        conn.commit()
 
 
 def game_minutes(event_id: str, league: str = "nba") -> dict:
